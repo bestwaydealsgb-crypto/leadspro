@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getLeadById, saveGeneratedMessages, getLeadMessages } from '@/lib/db/queries';
-import { generateMessages } from '@/lib/ai/messageGenerator';
+import { generateCustomMessages } from '@/lib/ai/customMessageGenerator';
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,8 +16,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
     }
 
-    // Generate messages
-    const messages = await generateMessages(lead);
+    // Generate messages using custom generator (no external API)
+    const messages = await generateCustomMessages(lead);
     if (!messages) {
       return NextResponse.json({ error: 'Failed to generate messages' }, { status: 500 });
     }

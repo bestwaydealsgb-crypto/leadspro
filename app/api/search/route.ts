@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { searchBusinesses, enrichBusinessWithData } from '@/lib/services/businessSearch';
+import { searchLocalBusinesses, bulkEnrichBusinesses } from '@/lib/services/customBusinessSearch';
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,13 +13,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Search for businesses using custom database
-    const businesses = await searchBusinesses(niche, location);
+    // Search for businesses using custom service (no external API)
+    const businesses = await searchLocalBusinesses(niche, location, limit);
 
-    // Enrich with website data
-    const enrichedBusinesses = await Promise.all(
-      businesses.slice(0, limit).map((business) => enrichBusinessWithData(business))
-    );
+    // Enrich with analysis
+    const enrichedBusinesses = await bulkEnrichBusinesses(businesses);
 
     return NextResponse.json({
       results: enrichedBusinesses,

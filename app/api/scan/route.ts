@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createScanJob, updateScanProgress, completeScanJob, getScanJob } from '@/lib/db/queries';
-import { searchBusinessesGoogle } from '@/lib/scrapers/googleSearch';
-import { scrapeGoogleMaps } from '@/lib/scrapers/googleMaps';
-import { websiteExists, extractWebsiteData } from '@/lib/scrapers/websiteData';
-import { analyzeWebsite } from '@/lib/analyzers/websiteAnalyzer';
-import { saveLead } from '@/lib/db/queries';
+import { createScanJob, updateScanProgress, completeScanJob, getScanJob, saveLead } from '@/lib/db/queries';
+import { searchLocalBusinesses, enrichBusinessWithCustomAnalysis } from '@/lib/services/customBusinessSearch';
 import { Lead, LeadStatus } from '@/types';
 
 export async function POST(request: NextRequest) {
@@ -53,51 +49,70 @@ export async function GET(request: NextRequest) {
 
 async function scanInBackground(scanId: string, niche: string, location: string) {
   try {
-    // Step 1: Search for businesses
+    // Step 1: Search for businesses using custom service
     await updateScanProgress(scanId, 10, 'Searching for businesses...', {});
 
-    const googleResults = await searchBusinessesGoogle(niche, location);
-    const mapsResults = await scrapeGoogleMaps(niche, location);
+    const businesses = await searchLocalBusinesses(niche, location, 50);
 
-    // Merge results
-    const allBusinesses = [...googleResults, ...mapsResults];
-
-    // Remove duplicates
-    const uniqueBusinesses = Array.from(
-      new Map(allBusinesses.map((b) => [b.name.toLowerCase(), b])).values()
-    );
-
-    await updateScanProgress(scanId, 15, `Found ${uniqueBusinesses.length} businesses`, {
-      total_found: uniqueBusinesses.length,
+    await updateScanProgress(scanId, 15, `Found ${businesses.length} businesses`, {
+      total_found: businesses.length,
     });
 
-    // Step 2: Analyze each business
+    // Step 2: Analyze and save each business
     let analyzed = 0;
     let addedLeads = 0;
-    let skipped = 0;
 
-    for (const business of uniqueBusinesses) {
+    for (const business of businesses) {
       analyzed++;
-      const progress = 15 + Math.round(60 * (analyzed / uniqueBusinesses.length));
+      const progress = 15 + Math.round(75 * (analyzed / businesses.length));
 
-      // Check if website exists
-      let hasWebsite = false;
-      let websiteScore = null;
-      let websiteIssues: string[] = [];
-      let mobileScreenshot: string | null = null;
-      let desktopScreenshot: string | null = null;
+      // Enrich with analysis
+      const enrichedBusiness = await enrichBusinessWithCustomAnalysis(business);
 
-      if (business.website_url) {
-        hasWebsite = await websiteExists(business.website_url);
+      try {
+        // Save as lead
+        await saveLead({
+          business_name: enrichedBusiness.business_name,
+          business_category: enrichedBusiness.business_category,
+          city: enrichedBusiness.city,
+          address: enrichedBusiness.address,
+          phone_numbers: enrichedBusiness.phone_numbers,
+          email_addresses: enrichedBusiness.email_addresses,
+          website_url: enrichedBusiness.website_url,
+          lead_status: enrichedBusiness.lead_status,
+          website_score: enrichedBusiness.website_score,
+          issues_found: enrichedBusiness.issues_found,
+          outreach_status: 'PENDING',
+          lead_priority: 'MEDIUM',
+        });
 
-        if (hasWebsite) {
-          // Analyze website
-          const analysis = await analyzeWebsite(business.website_url);
-          if (analysis) {
-            websiteScore = analysis.overall_score;
-            websiteIssues = analysis.issues;
-            mobileScreenshot = analysis.mobile_screenshot;
-            desktopScreenshot = analysis.desktop_screenshot;
+        addedLeads++;
+      } catch (err) {
+        console.log(`Skipped business: ${business.business_name}`);
+      }
+
+      await updateScanProgress(
+        scanId,
+        progress,
+        `Analyzed ${analyzed}/${businesses.length} - Added ${addedLeads}`,
+        {
+          total_analyzed: analyzed,
+          total_leads: addedLeads,
+        }
+      );
+    }
+
+    // Mark as completed
+    await completeScanJob(scanId);
+
+    await updateScanProgress(scanId, 100, 'Scan completed!', {
+      total_analyzed: analyzed,
+      total_leads: addedLeads,
+    });
+  } catch (error) {
+    console.error('Scan background error:', error);
+  }
+}
 
             if (analysis.overall_score >= 75) {
               skipped++;
