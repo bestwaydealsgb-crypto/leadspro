@@ -3,14 +3,20 @@ import { Lead, GeneratedMessage } from '@/types';
 
 let client: OpenAI | null = null;
 
-function getClient(): OpenAI {
+function getClient(): OpenAI | null {
+  if (!process.env.OPENAI_API_KEY) {
+    return null;
+  }
+  
   if (!client) {
-    if (!process.env.OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY environment variable is not set');
+    try {
+      client = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+      });
+    } catch (error) {
+      console.warn('Failed to initialize OpenAI client:', error);
+      return null;
     }
-    client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
   }
   return client;
 }
@@ -18,6 +24,13 @@ function getClient(): OpenAI {
 export async function generateMessages(lead: Lead): Promise<GeneratedMessage | null> {
   try {
     const client = getClient();
+    
+    // If OpenAI API key is not configured, return default messages
+    if (!client) {
+      console.warn('OpenAI API key not configured, returning default messages');
+      return createDefaultMessages(lead);
+    }
+
     const prompt = buildPrompt(lead);
 
     const response = await client.chat.completions.create({
