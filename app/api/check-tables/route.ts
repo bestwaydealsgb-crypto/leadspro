@@ -3,6 +3,13 @@ import { supabase } from '@/lib/db/supabase';
 
 export async function GET(request: NextRequest) {
   try {
+    if (!supabase) {
+      return NextResponse.json({
+        tables_exist: false,
+        error: 'Supabase environment variables not configured',
+      });
+    }
+
     // Check if tables exist
     const tables = ['scan_jobs', 'leads', 'generated_messages'];
     let allTablesExist = true;

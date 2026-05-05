@@ -3,6 +3,13 @@ import { supabase } from '@/lib/db/supabase';
 
 export async function GET(request: NextRequest) {
   try {
+    if (!supabase) {
+      return NextResponse.json({
+        connected: false,
+        error: 'Supabase environment variables not configured',
+      });
+    }
+
     // Simple test query to check if database is accessible
     const { data, error } = await supabase
       .from('scan_jobs')

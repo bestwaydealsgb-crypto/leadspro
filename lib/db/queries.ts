@@ -1,9 +1,18 @@
 import { supabase } from './supabase';
 import { Lead, ScanJob, GeneratedMessage } from '@/types';
 
+// Helper function to ensure supabase is initialized
+function ensureSupabase() {
+  if (!supabase) {
+    throw new Error('Supabase is not initialized. Please configure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.');
+  }
+  return supabase;
+}
+
 // Scan Jobs
 export async function createScanJob(niche: string, location: string): Promise<ScanJob> {
-  const { data, error } = await supabase
+  const sb = ensureSupabase();
+  const { data, error } = await sb
     .from('scan_jobs')
     .insert({
       niche,
@@ -36,6 +45,7 @@ export async function updateScanProgress(
     total_skipped?: number;
   }
 ): Promise<void> {
+  const sb = ensureSupabase();
   const updateData: any = {
     progress,
     current_action: currentAction,
@@ -46,7 +56,7 @@ export async function updateScanProgress(
   if (counts.total_leads !== undefined) updateData.total_leads = counts.total_leads;
   if (counts.total_skipped !== undefined) updateData.total_skipped = counts.total_skipped;
 
-  const { error } = await supabase
+  const { error } = await sb
     .from('scan_jobs')
     .update(updateData)
     .eq('id', scanId);
@@ -55,7 +65,8 @@ export async function updateScanProgress(
 }
 
 export async function completeScanJob(scanId: string): Promise<void> {
-  const { error } = await supabase
+  const sb = ensureSupabase();
+  const { error } = await sb
     .from('scan_jobs')
     .update({
       status: 'COMPLETED',
@@ -67,7 +78,8 @@ export async function completeScanJob(scanId: string): Promise<void> {
 }
 
 export async function getScanJob(scanId: string): Promise<ScanJob | null> {
-  const { data, error } = await supabase
+  const sb = ensureSupabase();
+  const { data, error } = await sb
     .from('scan_jobs')
     .select()
     .eq('id', scanId)
@@ -79,7 +91,8 @@ export async function getScanJob(scanId: string): Promise<ScanJob | null> {
 
 // Leads
 export async function saveLead(leadData: Omit<Lead, 'id' | 'created_at' | 'updated_at'>): Promise<Lead> {
-  const { data, error } = await supabase
+  const sb = ensureSupabase();
+  const { data, error } = await sb
     .from('leads')
     .insert({
       ...leadData,
@@ -106,7 +119,8 @@ export async function getLeads(
     sortOrder?: 'asc' | 'desc';
   }
 ): Promise<{ leads: Lead[]; total: number }> {
-  let query = supabase.from('leads').select('*', { count: 'exact' });
+  const sb = ensureSupabase();
+  let query = sb.from('leads').select('*', { count: 'exact' });
 
   if (filters?.status) {
     query = query.eq('lead_status', filters.status);
@@ -143,7 +157,8 @@ export async function getLeads(
 }
 
 export async function getLeadById(id: string): Promise<Lead | null> {
-  const { data, error } = await supabase
+  const sb = ensureSupabase();
+  const { data, error } = await sb
     .from('leads')
     .select()
     .eq('id', id)
@@ -154,7 +169,8 @@ export async function getLeadById(id: string): Promise<Lead | null> {
 }
 
 export async function updateLeadOutreachStatus(id: string, status: string): Promise<void> {
-  const { error } = await supabase
+  const sb = ensureSupabase();
+  const { error } = await sb
     .from('leads')
     .update({ outreach_status: status, updated_at: new Date().toISOString() })
     .eq('id', id);
@@ -163,12 +179,14 @@ export async function updateLeadOutreachStatus(id: string, status: string): Prom
 }
 
 export async function deleteLead(id: string): Promise<void> {
-  const { error } = await supabase.from('leads').delete().eq('id', id);
+  const sb = ensureSupabase();
+  const { error } = await sb.from('leads').delete().eq('id', id);
   if (error) throw error;
 }
 
 export async function bulkDeleteLeads(ids: string[]): Promise<void> {
-  const { error } = await supabase.from('leads').delete().in('id', ids);
+  const sb = ensureSupabase();
+  const { error } = await sb.from('leads').delete().in('id', ids);
   if (error) throw error;
 }
 
@@ -177,7 +195,8 @@ export async function saveGeneratedMessages(
   leadId: string,
   messages: GeneratedMessage
 ): Promise<void> {
-  const { error } = await supabase.from('generated_messages').insert({
+  const sb = ensureSupabase();
+  const { error } = await sb.from('generated_messages').insert({
     lead_id: leadId,
     ...messages,
     created_at: new Date().toISOString(),
@@ -187,7 +206,8 @@ export async function saveGeneratedMessages(
 }
 
 export async function getLeadMessages(leadId: string): Promise<GeneratedMessage | null> {
-  const { data, error } = await supabase
+  const sb = ensureSupabase();
+  const { data, error } = await sb
     .from('generated_messages')
     .select()
     .eq('lead_id', leadId)
@@ -207,7 +227,8 @@ export async function getStats(): Promise<{
   average_website: number;
   good_website: number;
 }> {
-  const { data, error } = await supabase.from('leads').select('lead_status');
+  const sb = ensureSupabase();
+  const { data, error } = await sb.from('leads').select('lead_status');
 
   if (error) throw error;
 
